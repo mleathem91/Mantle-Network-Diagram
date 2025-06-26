@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-06-26
+
+### Changed
+- **Project Consolidation**: The project has been consolidated to a single, enhanced network explorer: `MantleNetworkExplorer.py`.
+- **Deprecated Scripts**: Removed all other Python scripts (`MantleNetworkDiagram.py`, `MantleNetworkDiagram_Highcharts.py`, etc.) and their corresponding HTML outputs.
+- **Data Filtering**: The data loaded from the CSV is now filtered to focus on the "BENEFIT ITEMS" section.
+- **Data Exclusion**: Items with `is_quote = 1` are now excluded from the visualization.
+- **Item Name Formatting**: Item names in the diagram are now formatted as `id_item - id_event - display_group - item_name` for better clarity.
+- **Removed Item Limit**: The 100-item limit has been removed, allowing the tool to process and display all relevant items from the filtered dataset.
+
+### Removed
+- Deprecated `MantleNetworkDiagram.py`, `MantleNetworkDiagram_Highcharts.py`, and other related scripts and HTML files.
+
 ## [2.0.0] - 2025-06-25
 
 ### Added

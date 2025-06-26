@@ -31,13 +31,62 @@ def load_and_prepare_data(csv_file_path):
         return None
 
     try:
+        # Load the CSV file
         df_full = pd.read_csv(csv_file_path, header=None, low_memory=False)
+        
+        # Use the existing logic to extract data
         df = df_full.iloc[DATA_START_ROW:].copy()
         df.reset_index(drop=True, inplace=True)
         df.rename(columns=COLUMN_MAP, inplace=True)
+        
+        # Find the row with "BENEFIT ITEMS"
+        benefit_row = -1
+        for index, row in df.iterrows():
+            for col, value in row.items():
+                if isinstance(value, str) and "BENEFIT ITEMS" in value:
+                    benefit_row = index
+                    break
+            if benefit_row >= 0:
+                break
+        
+        # If we found the BENEFIT ITEMS row, filter to rows after it
+        if benefit_row >= 0:
+            df = df.iloc[benefit_row+1:].copy()
+            
+            # Find the first blank row after BENEFIT ITEMS
+            blank_row = -1
+            for index, row in df.iterrows():
+                if row.isnull().all():
+                    blank_row = index
+                    break
+            
+            # If we found a blank row, filter to rows before it
+            if blank_row >= 0:
+                df = df.iloc[:blank_row].copy()
+            
+            df.reset_index(drop=True, inplace=True)
+        else:
+            print("Warning: Could not find 'BENEFIT ITEMS' section. Using all data.")
+        
+        # Try to find the is_quote column
+        is_quote_col = None
+        for col in df.columns:
+            if col not in COLUMN_MAP.values():  # Skip already mapped columns
+                col_values = df[col].astype(str).str.lower()
+                if any(col_values.str.contains('is_quote')):
+                    # The column after this one should have the values
+                    is_quote_col = col + 1
+                    break
+        
+        # Filter out rows with is_quote = 1
+        if is_quote_col is not None and is_quote_col in df.columns:
+            df = df[df[is_quote_col].astype(str) != '1']
+        
         return df
     except Exception as e:
         print(f"Error reading or processing the CSV file: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def build_relationship_graph(df):
@@ -52,10 +101,28 @@ def build_relationship_graph(df):
     col_start_2 = get_column_index(PARAMS2_COLS[0])
     col_end_2 = get_column_index(PARAMS2_COLS[1])
     
+    # Find columns for formatting item names
+    id_item_col = None
+    id_event_col = None
+    display_group_col = None
+    item_name_col = None
+    
+    # Look for header rows that might contain column names
+    for col in range(len(df.columns)):
+        col_values = df.iloc[:min(5, len(df)), col].astype(str).str.lower()
+        if any(col_values.str.contains('id_item')):
+            id_item_col = col + 1  # The values would be in the next column
+        elif any(col_values.str.contains('id_event')):
+            id_event_col = col + 1
+        elif any(col_values.str.contains('display_group')):
+            display_group_col = col + 1
+        elif any(col_values.str.contains('item_name')) and col != 1:  # Avoid confusing with the renamed column
+            item_name_col = col + 1
+    
     # Process each row
     for index, row in df.iterrows():
         item_id = row['ItemID']
-        item_name = row['ItemName']
+        default_item_name = row['ItemName']
         item_type = row['ItemType']
         
         # Skip empty rows
@@ -64,10 +131,43 @@ def build_relationship_graph(df):
             
         item_id = str(item_id).strip()
         
+        # Format item name: id_item - id_event - display_group - item_name
+        formatted_name_parts = []
+        
+        # Add id_item
+        if id_item_col is not None and id_item_col < len(row):
+            value = row.iloc[id_item_col]
+            if pd.notna(value):
+                formatted_name_parts.append(str(value))
+        else:
+            formatted_name_parts.append(item_id)  # Use ItemID as fallback
+        
+        # Add id_event
+        if id_event_col is not None and id_event_col < len(row):
+            value = row.iloc[id_event_col]
+            if pd.notna(value):
+                formatted_name_parts.append(str(value))
+        
+        # Add display_group
+        if display_group_col is not None and display_group_col < len(row):
+            value = row.iloc[display_group_col]
+            if pd.notna(value):
+                formatted_name_parts.append(str(value))
+        
+        # Add item_name
+        if item_name_col is not None and item_name_col < len(row):
+            value = row.iloc[item_name_col]
+            if pd.notna(value):
+                formatted_name_parts.append(str(value))
+        else:
+            formatted_name_parts.append(str(default_item_name) if pd.notna(default_item_name) else "")
+        
+        formatted_name = " - ".join(formatted_name_parts)
+        
         # Store item information
         all_items[item_id] = {
             'id': item_id,
-            'name': str(item_name) if pd.notna(item_name) else item_id,
+            'name': formatted_name.strip(),
             'type': str(item_type) if pd.notna(item_type) else 'Unknown',
             'color': get_node_color(item_type)
         }
@@ -163,7 +263,8 @@ def generate_web_interface(csv_file_path, output_file_name):
     # Get list of all item IDs for the dropdown
     item_list = sorted(all_items.keys())
     item_options = []
-    for item_id in item_list[:100]:  # Limit to first 100 for performance
+    # Remove the 100 item limit to include all items
+    for item_id in item_list:
         item_info = all_items[item_id]
         item_options.append({
             'id': item_id,
@@ -204,8 +305,9 @@ def generate_web_interface(csv_file_path, output_file_name):
         }}
         
         #container {{
-            width: 100%;
-            height: 700px;
+            width: 800px;
+            height: 800px;
+            margin: 0 auto;
             background-color: #222222;
             border-radius: 10px;
             border: 1px solid #ddd;
