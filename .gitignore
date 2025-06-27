@@ -56,3 +56,8 @@ $RECYCLE.BIN/
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
+
+# Custom ignores
+debug_*.py
+examine_csv.py
+test_output.html
